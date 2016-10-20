@@ -56,3 +56,7 @@ ChangeLog
 
 # Files created by releasenotes build
 releasenotes/build
+
+# Glisten
+venv
+ssh_host_key
