@@ -1,0 +1,40 @@
+
+
+github
+
+
+IssueCommentEvent -> comment-added
+
+PullRequestEvent -> 'opened' -> PatchsetCreated
+PullRequestReviewEvent  -> 'submitted' -> Comment Added (approved)
+
+PushEvent
+
+CreateEvent
+
+DeleteEvent
+
+
+
+Gerrit Events(in zuul layout.yaml):
+
+
+*    Patchset Created
+*    Change Restored
+*    Comment Added
+*    Ref Updated
+
+Zuul also have a 'project-change-merged' to do mergability checks(merge check pipeline), but github handles this for us.
+
+
+*    Assignee Changed
+*    Change Abandoned
+*    Change Merged
+*    Draft Published
+*    Dropped Output
+*    Hashtags Changed
+*    Project Created
+*    Reviewer Added
+*    Reviewer Deleted
+*    Topic Changed
+
