@@ -16,8 +16,8 @@ This project requires python3.
 
 .. code-block:: shell
 
-    virtualenv -p python3 venv
-    source venv/bin/python
+    $ virtualenv -p python3 venv
+    $ source venv/bin/python
 
 
 This project requires you to generate an ssh host key
@@ -25,27 +25,39 @@ This project requires you to generate an ssh host key
 
 .. code-block:: shell
 
-    ssh-keygen -t rsa -b 4096 -f ssh_host_key
+    $ ssh-keygen -t rsa -b 4096 -f ssh_host_key
 
 Running:
 
 .. code-block:: shell
 
-    pip install -r requirements.txt
-    python glisten/glisten.py
+    $ pip install -r requirements.txt
+    $ python glisten/glisten.py
+    ======== Running on http://0.0.0.0:8080/ ========
+    (Press CTRL+C to quit)
+    SSH connection received from 127.0.0.1.
+    SSH connection closed.
+
 
 
 Use the webserver:
 
 .. code-block:: shell
 
-    curl http://localhost:8080
+    $ curl http://localhost:8080
+    Hello, Anonymous
 
 Use the ssh server(password: secretpw):
 
 .. code-block:: shell
 
-    ssh -p 8022 user123@localhost
+    $ ssh -p 8022 user123@localhost
+    Password:
+    Welcome to my SSH server, user123!
+    Connection to localhost closed.
+
+
+
 
 
 ------
