@@ -14,42 +14,43 @@ setup
 
 This project requires python3.
 
-```shell
+``shell
 
 virtualenv -p python3 venv
 source venv/bin/python
 
-```
+``
 
 This project requires you to generate an ssh host key
 
-```
+``shell
 ssh-keygen -t rsa -b 4096 -f ssh_host_key
-```
+``
 
 Running:
 
-```
+``shell
 pip install -r requirements.txt
 python glisten/glisten.py
-```
+``
 
 
 Use the webserver:
 
-```
+``shell
 curl http://localhost:8080
-```
+``
 
 Use the ssh server(password: secretpw):
 
-```
+``shell
 ssh -p 8022 user123@localhost
-```
+``
 
----
+
+------
 notes
----
+------
 
 
 * Free software: Apache license
