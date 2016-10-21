@@ -13,6 +13,23 @@ async def handle(request):
     text = "Hello, " + name
     return web.Response(text=text)
 
+async def get_name_handler(request):
+    name = request.app['latest_project_name']
+    text = "The name is: " + name
+    return web.Response(text=text)
+
+async def post_handler(request):
+
+    # WARNING: don't do this if you plan to receive large files!
+    project_name = await request.json()
+
+    request.app['latest_project_name'] = project_name['project_name']
+
+    text = "Data Recieved!"
+
+    return web.Response(text=text)
+
+
 async def wshandler(request):
     ws = web.WebSocketResponse()
     await ws.prepare(request)
@@ -59,12 +76,28 @@ async def start_server():
                                  server_host_keys=['ssh_host_key'],
                                  session_factory=handle_session)
 
-loop = asyncio.get_event_loop()
-loop.run_until_complete(start_server())
+class Glisten():
+    def __init__(self):
 
-app = web.Application()
-app.router.add_get('/echo', wshandler)
-app.router.add_get('/', handle)
-app.router.add_get('/{name}', handle)
+        # SSH server
+        self.loop = asyncio.get_event_loop()
+        ssh_server = start_server()
+        self.loop.run_until_complete(start_server())
 
-web.run_app(app)
+        # http server
+        app = web.Application()
+        app.router.add_get('/echo', wshandler)
+        app.router.add_get('/', handle)
+        app.router.add_get('/get_name', get_name_handler)
+        app.router.add_post('/post', post_handler)
+        app['latest_project_name'] = 'intial name'
+
+        # this calls run_until_complete somewhere
+        web.run_app(app)
+
+
+if __name__ == "__main__":
+
+    glisten = Glisten()
+
+
