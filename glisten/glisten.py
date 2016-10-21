@@ -28,10 +28,12 @@ async def handle(request):
     text = "Hello, " + name
     return web.Response(text=text)
 
+
 async def get_name_handler(request):
     events = request.app['glisten_events']
     text = "The first event is: " + events.get_first_event()
     return web.Response(text=text)
+
 
 async def post_handler(request):
 
@@ -46,29 +48,10 @@ async def post_handler(request):
     return web.Response(text=text)
 
 
-async def wshandler(request):
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
-
-    async for msg in ws:
-        if msg.type == web.MsgType.text:
-            ws.send_str("Hello, {}".format(msg.data))
-        elif msg.type == web.MsgType.binary:
-            ws.send_bytes(msg.data)
-        elif msg.type == web.MsgType.close:
-            break
-
-    return ws
-
-def handle_session(stdin, stdout, stderr):
-    stdout.write('Welcome to my SSH server, %s!\n' %
-                 stdout.channel.get_extra_info('username'))
-    stdout.channel.exit(0)
-
 class StreamEventsSession(asyncssh.SSHServerSession):
     _clients = []
 
-    def __init__(self, stdin, stdout, stderr):
+    def __init__(self, stdin, stdout):
         self._stdin = stdin
         self._stdout = stdout
 
@@ -130,20 +113,21 @@ class MySSHServer(asyncssh.SSHServer):
     def session_requested(self):
         return StreamEventsSession
 
-def create_handler(events):
-    def handle_session_modified(stdin, stdout, stderr):
-        stdout.write('Welcome to my SSH server, %s!\n' % 
-                      events.get_last_event())
-        stdout.channel.exit(0)
+
+def create_handler(events, clients):
+    async def handle_session_modified(stdin, stdout, stderr):
+        while True:
+            event = await events.get_last_event()
+            stdout.write('Welcome to my SSH server, %s!\n' % event)
+
     return handle_session_modified
 
 
-async def start_server(events):
-    handler  = create_handler(events)
+async def start_server(events, clients):
+    handler  = create_handler(events, clients)
     await asyncssh.create_server(MySSHServer, '', 8022,
                                  server_host_keys=['ssh_host_key'],
-                                 session_factory=handler
-                                 )
+                                 session_factory=)
 
 
 class Events:
@@ -160,23 +144,24 @@ class Events:
         return self.events[0]
 
     def get_last_event(self):
-        return self.events[-1]
+        event = self.events.pop()
+        return event
 
 
 class Glisten():
     def __init__(self):
 
         self.events = Events()
+        self.clients = []
         self.events.add_event("first event")
 
         # SSH server
         self.loop = asyncio.get_event_loop()
-        ssh_server = start_server(self.events)
+        ssh_server = start_server(self.events, self.clients)
         self.loop.run_until_complete(ssh_server)
 
         # http server
         app = web.Application()
-        app.router.add_get('/echo', wshandler)
         app.router.add_get('/', handle)
         app.router.add_get('/get_name', get_name_handler)
         app.router.add_post('/post', post_handler)
