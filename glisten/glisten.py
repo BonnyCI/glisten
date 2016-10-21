@@ -29,63 +29,18 @@ async def handle(request):
     return web.Response(text=text)
 
 
-async def get_name_handler(request):
-    events = request.app['glisten_events']
-    text = "The first event is: " + events.get_first_event()
-    return web.Response(text=text)
-
-
 async def post_handler(request):
 
     # WARNING: don't do this if you plan to receive large files!
     project_name = await request.json()
 
-    events = request.app['glisten_events']
-    events.add_event(project_name['project_name'])
+    clients = request.app['glisten_clients']
+    for client in clients:
+        client[1].write("Event: {0}\n".format(project_name['project_name']))
 
     text = "Data Recieved!"
 
     return web.Response(text=text)
-
-
-class StreamEventsSession(asyncssh.SSHServerSession):
-    _clients = []
-
-    def __init__(self, stdin, stdout):
-        self._stdin = stdin
-        self._stdout = stdout
-
-    @classmethod
-    async def handle_session(cls, stdin, stdout, stderr):
-        await cls(stdin, stdout).run()
-
-    def write(self, msg):
-        self._stdout.write(msg)
-
-    def broadcast(self, msg):
-        for client in self._clients:
-            if client != self:
-                client.write(msg)
-
-    async def run(self):
-        self.write('Welcome to chat!\n\n')
-
-        self.write('Enter your name: ')
-        name = (await self._stdin.readline()).rstrip('\n')
-
-        self.write('\n%d other users are connected.\n\n' % len(self._clients))
-
-        self._clients.append(self)
-        self.broadcast('*** %s has entered chat ***\n' % name)
-
-        try:
-            async for line in self._stdin:
-                self.broadcast('%s: %s' % (name, line))
-        except asyncssh.BreakReceived:
-            pass
-
-        self.broadcast('*** %s has left chat ***\n' % name)
-        self._clients.remove(self)
 
 
 class MySSHServer(asyncssh.SSHServer):
@@ -110,62 +65,39 @@ class MySSHServer(asyncssh.SSHServer):
         pw = passwords.get(username, '*')
         return crypt.crypt(password, pw) == pw
 
-    def session_requested(self):
-        return StreamEventsSession
 
-
-def create_handler(events, clients):
+def create_handler(clients):
     async def handle_session_modified(stdin, stdout, stderr):
-        while True:
-            event = await events.get_last_event()
-            stdout.write('Welcome to my SSH server, %s!\n' % event)
+        clients.append((stdin,stdout,stderr))
+
+        stdout.write('Welcome to my SSH server, %s!\n' % 'human unit')
+
 
     return handle_session_modified
 
 
-async def start_server(events, clients):
-    handler  = create_handler(events, clients)
+async def start_server(clients):
+    handler  = create_handler(clients)
     await asyncssh.create_server(MySSHServer, '', 8022,
                                  server_host_keys=['ssh_host_key'],
-                                 session_factory=)
-
-
-class Events:
-    def __init__(self):
-        self.events = []
-
-    def add_event(self, event):
-        self.events.append(event)
-
-    def delete_event(self, event):
-        self.events.remove(event)
-
-    def get_first_event(self):
-        return self.events[0]
-
-    def get_last_event(self):
-        event = self.events.pop()
-        return event
+                                 session_factory=handler)
 
 
 class Glisten():
     def __init__(self):
 
-        self.events = Events()
         self.clients = []
-        self.events.add_event("first event")
 
         # SSH server
         self.loop = asyncio.get_event_loop()
-        ssh_server = start_server(self.events, self.clients)
+        ssh_server = start_server(self.clients)
         self.loop.run_until_complete(ssh_server)
 
         # http server
         app = web.Application()
         app.router.add_get('/', handle)
-        app.router.add_get('/get_name', get_name_handler)
         app.router.add_post('/post', post_handler)
-        app['glisten_events'] = self.events
+        app['glisten_clients'] = self.clients
 
         # this calls run_until_complete somewhere
         web.run_app(app)
