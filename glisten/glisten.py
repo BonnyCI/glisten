@@ -29,8 +29,8 @@ async def handle(request):
     return web.Response(text=text)
 
 async def get_name_handler(request):
-    name = request.app['latest_project_name']
-    text = "The name is: " + name
+    events = request.app['glisten_events']
+    text = "The first event is: " + events.get_first_event()
     return web.Response(text=text)
 
 async def post_handler(request):
@@ -38,7 +38,8 @@ async def post_handler(request):
     # WARNING: don't do this if you plan to receive large files!
     project_name = await request.json()
 
-    request.app['latest_project_name'] = project_name['project_name']
+    events = request.app['glisten_events']
+    events.add_event(project_name['project_name'])
 
     text = "Data Recieved!"
 
@@ -129,30 +130,48 @@ class MySSHServer(asyncssh.SSHServer):
     def session_requested(self):
         return StreamEventsSession
 
-def create_handler(data_holder):
+def create_handler(events):
     def handle_session_modified(stdin, stdout, stderr):
         stdout.write('Welcome to my SSH server, %s!\n' % 
-                      data_holder['latest_project_name'])
+                      events.get_last_event())
         stdout.channel.exit(0)
     return handle_session_modified
 
 
-
-async def start_server(data_holder):
-    handler  = create_handler(data_holder)
+async def start_server(events):
+    handler  = create_handler(events)
     await asyncssh.create_server(MySSHServer, '', 8022,
                                  server_host_keys=['ssh_host_key'],
                                  session_factory=handler
                                  )
 
+
+class Events:
+    def __init__(self):
+        self.events = []
+
+    def add_event(self, event):
+        self.events.append(event)
+
+    def delete_event(self, event):
+        self.events.remove(event)
+
+    def get_first_event(self):
+        return self.events[0]
+
+    def get_last_event(self):
+        return self.events[-1]
+
+
 class Glisten():
     def __init__(self):
-        self.latest_project_name = 'initial_name'
-        self.data_holder = { 'latest_project_name': self.latest_project_name }
+
+        self.events = Events()
+        self.events.add_event("first event")
 
         # SSH server
         self.loop = asyncio.get_event_loop()
-        ssh_server = start_server(self.data_holder)
+        ssh_server = start_server(self.events)
         self.loop.run_until_complete(ssh_server)
 
         # http server
@@ -161,7 +180,7 @@ class Glisten():
         app.router.add_get('/', handle)
         app.router.add_get('/get_name', get_name_handler)
         app.router.add_post('/post', post_handler)
-        app['latest_project_name'] = self.latest_project_name
+        app['glisten_events'] = self.events
 
         # this calls run_until_complete somewhere
         web.run_app(app)
