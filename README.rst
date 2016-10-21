@@ -39,23 +39,23 @@ Running:
     SSH connection closed.
 
 
-
 Use the webserver:
 
 .. code-block:: shell
 
-    $ curl http://localhost:8080
-    Hello, Anonymous
+    $ curl -X POST -d '{"project_name": "slasetrs"}' localhost:8080/post
+
 
 Use the ssh server(password: secretpw):
 
 .. code-block:: shell
 
-    $ ssh -p 8022 user123@localhost
-    Password:
-    Welcome to my SSH server, user123!
-    Connection to localhost closed.
-
+    $: ssh -p 8022 guest@localhost
+    Welcome to my SSH server, human unit!
+    Event: slasetrs
+    Event: slasetrs
+    Event: slasetrs
+    Event: slasetrs
 
 
 
