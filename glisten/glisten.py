@@ -1,3 +1,18 @@
+#!/usr/bin/env python3.5
+#
+# Parts of this file
+# Copyright (c) 2016 by Ron Frederick <ronf@timeheart.net>.
+# All rights reserved.
+#
+# This program and the accompanying materials are made available under
+# the terms of the Eclipse Public License v1.0 which accompanies this
+# distribution and is available at:
+#
+#     http://www.eclipse.org/legal/epl-v10.html
+#
+# Contributors:
+#     Ron Frederick - initial implementation, API, and documentation
+
 from aiohttp import web
 import asyncio, asyncssh, crypt, sys
 
@@ -49,6 +64,46 @@ def handle_session(stdin, stdout, stderr):
                  stdout.channel.get_extra_info('username'))
     stdout.channel.exit(0)
 
+class StreamEventsSession(asyncssh.SSHServerSession):
+    _clients = []
+
+    def __init__(self, stdin, stdout, stderr):
+        self._stdin = stdin
+        self._stdout = stdout
+
+    @classmethod
+    async def handle_session(cls, stdin, stdout, stderr):
+        await cls(stdin, stdout).run()
+
+    def write(self, msg):
+        self._stdout.write(msg)
+
+    def broadcast(self, msg):
+        for client in self._clients:
+            if client != self:
+                client.write(msg)
+
+    async def run(self):
+        self.write('Welcome to chat!\n\n')
+
+        self.write('Enter your name: ')
+        name = (await self._stdin.readline()).rstrip('\n')
+
+        self.write('\n%d other users are connected.\n\n' % len(self._clients))
+
+        self._clients.append(self)
+        self.broadcast('*** %s has entered chat ***\n' % name)
+
+        try:
+            async for line in self._stdin:
+                self.broadcast('%s: %s' % (name, line))
+        except asyncssh.BreakReceived:
+            pass
+
+        self.broadcast('*** %s has left chat ***\n' % name)
+        self._clients.remove(self)
+
+
 class MySSHServer(asyncssh.SSHServer):
     def connection_made(self, conn):
         print('SSH connection received from %s.' %
@@ -71,18 +126,34 @@ class MySSHServer(asyncssh.SSHServer):
         pw = passwords.get(username, '*')
         return crypt.crypt(password, pw) == pw
 
-async def start_server():
+    def session_requested(self):
+        return StreamEventsSession
+
+def create_handler(data_holder):
+    def handle_session_modified(stdin, stdout, stderr):
+        stdout.write('Welcome to my SSH server, %s!\n' % 
+                      data_holder['latest_project_name'])
+        stdout.channel.exit(0)
+    return handle_session_modified
+
+
+
+async def start_server(data_holder):
+    handler  = create_handler(data_holder)
     await asyncssh.create_server(MySSHServer, '', 8022,
                                  server_host_keys=['ssh_host_key'],
-                                 session_factory=handle_session)
+                                 session_factory=handler
+                                 )
 
 class Glisten():
     def __init__(self):
+        self.latest_project_name = 'initial_name'
+        self.data_holder = { 'latest_project_name': self.latest_project_name }
 
         # SSH server
         self.loop = asyncio.get_event_loop()
-        ssh_server = start_server()
-        self.loop.run_until_complete(start_server())
+        ssh_server = start_server(self.data_holder)
+        self.loop.run_until_complete(ssh_server)
 
         # http server
         app = web.Application()
@@ -90,7 +161,7 @@ class Glisten():
         app.router.add_get('/', handle)
         app.router.add_get('/get_name', get_name_handler)
         app.router.add_post('/post', post_handler)
-        app['latest_project_name'] = 'intial name'
+        app['latest_project_name'] = self.latest_project_name
 
         # this calls run_until_complete somewhere
         web.run_app(app)
