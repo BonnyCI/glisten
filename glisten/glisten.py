@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.5
 #
-# Parts of this file
 # Copyright (c) 2016 by Ron Frederick <ronf@timeheart.net>.
+# Copyright (c) 2016 IBM
 # All rights reserved.
 #
 # This program and the accompanying materials are made available under
@@ -11,17 +11,22 @@
 #     http://www.eclipse.org/legal/epl-v10.html
 #
 # Contributors:
-#     Ron Frederick - initial implementation, API, and documentation
+#     Ron Frederick - examples used in initial implementation,
+#                     API, and documentation
+#     Spencer Krum  - glisten code
 
 from aiohttp import web
-import asyncio, asyncssh, crypt, sys
+import asyncio
+import asyncssh
+import crypt
+import sys
 
 # To run this program, the file ``ssh_host_key`` must exist with an SSH
 # private key in it to use as a server host key. An SSH host certificate
 # can optionally be provided in the file ``ssh_host_key-cert.pub``.
 passwords = {'guest': '',                 # guest account with no password
              'user123': 'qV2iEadIGV2rw'   # password of 'secretpw'
-            }
+             }
 
 async def handle(request):
     name = request.match_info.get('name', "Anonymous")
@@ -46,7 +51,7 @@ async def post_handler(request):
 class MySSHServer(asyncssh.SSHServer):
     def connection_made(self, conn):
         print('SSH connection received from %s.' %
-                  conn.get_extra_info('peername')[0])
+              conn.get_extra_info('peername')[0])
 
     def connection_lost(self, exc):
         if exc:
@@ -68,16 +73,15 @@ class MySSHServer(asyncssh.SSHServer):
 
 def create_handler(clients):
     async def handle_session_modified(stdin, stdout, stderr):
-        clients.append((stdin,stdout,stderr))
+        clients.append((stdin, stdout, stderr))
 
         stdout.write('Welcome to my SSH server, %s!\n' % 'human unit')
-
 
     return handle_session_modified
 
 
 async def start_server(clients):
-    handler  = create_handler(clients)
+    handler = create_handler(clients)
     await asyncssh.create_server(MySSHServer, '', 8022,
                                  server_host_keys=['ssh_host_key'],
                                  session_factory=handler)
@@ -106,5 +110,3 @@ class Glisten():
 if __name__ == "__main__":
 
     glisten = Glisten()
-
-
