@@ -28,27 +28,8 @@ passwords = {'guest': '',                 # guest account with no password
              'user123': 'qV2iEadIGV2rw'   # password of 'secretpw'
              }
 
-async def handle(request):
-    name = request.match_info.get('name', "Anonymous")
-    text = "Hello, " + name
-    return web.Response(text=text)
 
-
-async def post_handler(request):
-
-    # WARNING: don't do this if you plan to receive large files!
-    project_name = await request.json()
-
-    clients = request.app['glisten_clients']
-    for client in clients:
-        client[1].write("Event: {0}\n".format(project_name['project_name']))
-
-    text = "Data Recieved!"
-
-    return web.Response(text=text)
-
-
-class MySSHServer(asyncssh.SSHServer):
+class SSHServer(asyncssh.SSHServer):
     def connection_made(self, conn):
         print('SSH connection received from %s.' %
               conn.get_extra_info('peername')[0])
@@ -71,42 +52,62 @@ class MySSHServer(asyncssh.SSHServer):
         return crypt.crypt(password, pw) == pw
 
 
-def create_handler(clients):
-    async def handle_session_modified(stdin, stdout, stderr):
-        clients.append((stdin, stdout, stderr))
-
-        stdout.write('Welcome to my SSH server, %s!\n' % 'human unit')
-
-    return handle_session_modified
-
-
-async def start_server(clients):
-    handler = create_handler(clients)
-    await asyncssh.create_server(MySSHServer, '', 8022,
-                                 server_host_keys=['ssh_host_key'],
-                                 session_factory=handler)
-
-
-class Glisten():
+class Glisten(object):
     def __init__(self):
-
         self.clients = []
-
-        # SSH server
         self.loop = asyncio.get_event_loop()
-        ssh_server = start_server(self.clients)
-        self.loop.run_until_complete(ssh_server)
+        self.ssh_server = None
+        self.web_app = None
+
+    def start(self):
+        # SSH server
+        self.ssh_server = self._start_sshd()
+        self.loop.run_until_complete(self.ssh_server)
 
         # http server
         app = web.Application()
-        app.router.add_get('/', handle)
-        app.router.add_post('/post', post_handler)
-        app['glisten_clients'] = self.clients
+        app.router.add_get('/', self._handle_root_get)
+        app.router.add_post('/post', self._handle_webhook_post)
+        self.web_app = app
 
         # this calls run_until_complete somewhere
         web.run_app(app)
 
+    async def _start_sshd(self):
+        return await asyncssh.create_server(
+            SSHServer, '', 8022,
+            server_host_keys=['ssh_host_key'],
+            session_factory=self._handle_ssh_session)
+
+    async def _handle_ssh_session(self, stdin, stdout, stderr):
+        try:
+            self.clients.append((stdin, stdout, stderr))
+            stdout.write('Welcome to my SSH server, %s!\n' % 'human unit')
+            stdout.channel.exit(0)
+        finally:
+            self.clients.remove((stdin, stdout, stderr))
+
+    async def _handle_root_get(self, request):
+        name = request.match_info.get('name', "Anonymous")
+        text = "Hello, " + name
+        return web.Response(text=text)
+
+    async def _handle_webhook_post(self, request):
+        # WARNING: don't do this if you plan to receive large files!
+        project_name = await request.json()
+
+        for client in self.clients:
+            client[1].write("Event: {0}\n".format(project_name['project_name']))
+
+        text = "Data Recieved!"
+
+        return web.Response(text=text)
+
+
+def main():
+    g = Glisten()
+    g.start()
+
 
 if __name__ == "__main__":
-
-    glisten = Glisten()
+    main()
